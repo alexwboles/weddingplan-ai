@@ -8,17 +8,21 @@
 </head>
 <body>
 <header class="hero">
-  <p class="overline">Wedding planner</p>
-  <h1>WeddingPlan AI</h1>
-  <p class="tag">Your wedding date → a 12-month plan, budget, guest list, and vendor board. 100% local.</p>
-  <div class="daterow">
-    <label>Wedding date: <input type="date" id="weddate"></label>
-    <div id="countdown" class="countdown"></div>
+  <div class="hero-inner">
+    <p class="overline">The wedding folio</p>
+    <h1>WeddingPlan <span class="ai">AI</span></h1>
+    <p class="tag">Your wedding date → a 12-month plan, budget, guest list, and vendor board. 100% local.</p>
+    <div class="invitation">
+      <label class="datelabel">Wedding date
+        <input type="date" id="weddate">
+      </label>
+      <div id="countdown" class="countdown"></div>
+      <p id="nudge" class="nudge"></p>
+    </div>
   </div>
-  <p id="nudge" class="nudge"></p>
 </header>
 
-<nav class="tabs">
+<nav class="tabs" aria-label="Planner sections">
   <button class="tabbtn active" data-tab="timeline">Timeline</button>
   <button class="tabbtn" data-tab="budget">Budget</button>
   <button class="tabbtn" data-tab="guests">Guests</button>

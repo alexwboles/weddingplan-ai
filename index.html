@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WeddingPlan AI — your wedding, planned</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="hero">
+  <p class="overline">Wedding planner</p>
+  <h1>WeddingPlan AI</h1>
+  <p class="tag">Your wedding date → a 12-month plan, budget, guest list, and vendor board. 100% local.</p>
+  <div class="daterow">
+    <label>Wedding date: <input type="date" id="weddate"></label>
+    <div id="countdown" class="countdown"></div>
+  </div>
+  <p id="nudge" class="nudge"></p>
+</header>
+
+<nav class="tabs">
+  <button class="tabbtn active" data-tab="timeline">Timeline</button>
+  <button class="tabbtn" data-tab="budget">Budget</button>
+  <button class="tabbtn" data-tab="guests">Guests</button>
+  <button class="tabbtn" data-tab="vendors">Vendors</button>
+</nav>
+
+<main>
+  <section id="tab-timeline"><div id="timeline-list"></div></section>
+  <section id="tab-budget" style="display:none"><div id="budget-body"></div></section>
+  <section id="tab-guests" style="display:none"><div id="guests-body"></div></section>
+  <section id="tab-vendors" style="display:none"><div id="vendors-body"></div></section>
+</main>
+
+<footer>
+  <details>
+    <summary>Settings</summary>
+    <label>OpenAI API key (optional — enables AI wording polish; never required):
+      <input type="password" id="apikey" placeholder="sk-…" autocomplete="off">
+    </label>
+    <button id="reset" class="danger">Start over (clears this device)</button>
+  </details>
+  <p class="muted small">Your plan lives in this browser's localStorage (<code>weddingplan.v1</code>). Nothing is uploaded anywhere.</p>
+</footer>
+
+<script src="js/wedbank.js"></script>
+<script src="js/logic.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

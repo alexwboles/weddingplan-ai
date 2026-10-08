@@ -29,6 +29,18 @@ check "timeline: wedding 2027-09-28 from 2026-09-28 has 26 tasks" node -e "
   const L=require('./js/logic.js'); const B=require('./js/wedbank.js');
   const tl=L.buildTimeline('2027-09-28',[],'2026-09-28',B);
   if(tl.length!==26) throw new Error('got '+tl.length);"
+check "new logic API exported (filter/import/export/summary)" node -e "
+  const L=require('./js/logic.js');
+  ['filterTimeline','timelineCategories','parseGuestCSV','guestsToCSV','planSummaryText'].forEach(f=>{if(typeof L[f]!=='function')throw new Error('missing '+f)});"
+check "timelineCategories covers the bank" node -e "
+  const L=require('./js/logic.js'); const B=require('./js/wedbank.js');
+  const cats=L.timelineCategories(B);
+  if(cats.length<8) throw new Error('too few: '+cats.length);
+  if(!cats.includes('venue')||!cats.includes('budget')) throw new Error('missing core cats');"
+check "UI wires filter/import/export/notes/print" bash -c "
+  for n in tlSearch tlCat gcsv gimport gexport printPlan filterTimeline parseGuestCSV guestsToCSV planSummaryText vnote; do
+    grep -q \"\$n\" index.html js/app.js js/logic.js || exit 1
+  done"
 
 echo "--- smoke: $pass passed, $fail failed ---"
 exit $((fail>0))

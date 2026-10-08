@@ -16,6 +16,7 @@
 
   let state = load();
   let tab = "timeline";
+  let tlQuery = "", tlCat = "";
 
   function money(n) {
     return "$" + Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
@@ -67,8 +68,17 @@
     }
     const tl = buildTimeline(state.weddingDate, state.done, undefined, BANK);
     const open = tl.filter(t => t.status !== "done").length;
-    box.innerHTML = "<p class='muted'>" + open + " of " + tl.length + " tasks remaining</p>" +
-      tl.map(t => {
+    const cats = timelineCategories(BANK);
+    const shown = filterTimeline(tl, tlQuery, tlCat);
+    box.innerHTML =
+      "<div class='ttools'><input id='tlSearch' type='search' placeholder='Search tasks…' value='" + esc(tlQuery) + "' aria-label='Search tasks'>" +
+      "<select id='tlCat' aria-label='Filter by category'><option value=''>All categories</option>" +
+      cats.map(c => "<option value='" + c + "'" + (tlCat === c ? " selected" : "") + ">" + esc(c) + "</option>").join("") +
+      "</select></div>" +
+      "<p class='muted'>" + open + " of " + tl.length + " tasks remaining" +
+      ((tlQuery || tlCat) ? " · showing " + shown.length + " matching" : "") + "</p>" +
+      (shown.length ? "" : "<p class='muted'>No tasks match this filter.</p>") +
+      shown.map(t => {
         const checked = t.status === "done" ? "checked" : "";
         return "<label class='task " + t.status + "'>" +
           "<input type='checkbox' data-i='" + t.index + "' " + checked + ">" +
@@ -76,44 +86,21 @@
           "<span class='meta'>" + esc(t.due) + " · " + esc(t.category) + " · " + t.status.replace("-", " ") + "</span>" +
           "<span class='tip'>" + esc(t.tip) + "</span></label>";
       }).join("");
+    $("tlSearch").addEventListener("input", e => {
+      tlQuery = e.target.value;
+      const pos = e.target.selectionStart;
+      renderTimeline();
+      const s = $("tlSearch");
+      s.focus();
+      try { s.setSelectionRange(pos, pos); } catch (err) { /* noop */ }
+    });
+    $("tlCat").addEventListener("change", e => { tlCat = e.target.value; renderTimeline(); });
     box.querySelectorAll("input[type=checkbox]").forEach(cb => {
       cb.addEventListener("change", () => {
         const i = Number(cb.dataset.i);
         const at = state.done.indexOf(i);
         if (cb.checked && at < 0) state.done.push(i);
         if (!cb.checked && at >= 0) state.done.splice(at, 1);
-        save(state); render();
-      });
-    });
-  }
-
-  function renderBudget() {
-    const box = $("budget-body");
-    if (!state.budget.length) {
-      box.innerHTML = "<p class='muted'>No budget yet — enter a total below and auto-split it, or add categories one by one.</p>" +
-        "<div class='row'><input id='btotal' type='number' min='0' placeholder='Total budget, e.g. 25000'>" +
-        "<button id='bsplit'>Auto-split budget</button></div>";
-      $("bsplit").addEventListener("click", () => {
-        const total = Number($("btotal").value) || 0;
-        if (total <= 0) return;
-        state.budget = suggestedBudget(total, BUDGET_CATEGORIES);
-        save(state); render();
-      });
-      return;
-    }
-    const bt = budgetTotals(state.budget);
-    box.innerHTML =
-      "<div class='bignum'>" + money(bt.spent) + " <span class='muted'>of " + money(bt.planned) + " planned (" + bt.pct + "%)</span></div>" +
-      "<div class='bar'><div class='fill' style='width:" + Math.min(100, bt.pct) + "%'></div></div>" +
-      state.budget.map((l, i) =>
-        "<div class='bline'><span>" + esc(l.label) + "</span>" +
-        "<input type='number' min='0' data-k='planned' data-i='" + i + "' value='" + l.planned + "' aria-label='planned'>" +
-        "<input type='number' min='0' data-k='spent' data-i='" + i + "' value='" + l.spent + "' aria-label='spent'></div>"
-      ).join("") +
-      "<p class='muted small'>Left column: planned. Right column: spent so far.</p>";
-    box.querySelectorAll("input[data-k]").forEach(inp => {
-      inp.addEventListener("change", () => {
-        state.budget[Number(inp.dataset.i)][inp.dataset.k] = Number(inp.value) || 0;
         save(state); render();
       });
     });
@@ -133,7 +120,13 @@
       "<option value='maybe'>maybe</option><option value='no'>no</option></select>" +
       "<select id='gmeal'>" + mealOpts + "</select>" +
       "<label class='inline'><input id='gplus' type='checkbox'> +1</label>" +
-      "<button id='gadd'>Add guest</button></div>" +
+      "<button id='gadd'>Add guest</button>" +
+      "<button id='gexport' class='ghostbtn'>Export CSV</button></div>" +
+      "<details class='csvimport'><summary>Import guests from CSV</summary>" +
+      "<p class='muted small'>Paste rows as <code>name,rsvp,meal,plus_one</code> — e.g. <code>Jane Doe,yes,Chicken,yes</code>. Header row optional.</p>" +
+      "<textarea id='gcsv' rows='4' placeholder='name,rsvp,meal,plus_one'></textarea>" +
+      "<div class='row'><button id='gimport'>Import</button></div>" +
+      "<div id='gimportMsg'></div></details>" +
       "<div id='glist'>" + state.guests.map((g, i) =>
         "<div class='gline'><span>" + esc(g.name) + "</span>" +
         "<select data-i='" + i + "' class='gr'>" +
@@ -149,6 +142,26 @@
         name, rsvp: $("grsvp").value, meal: $("gmeal").value, plusOne: $("gplus").checked
       });
       save(state); render();
+    });
+    $("gexport").addEventListener("click", () => {
+      const blob = new Blob([guestsToCSV(state.guests)], { type: "text/csv" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "wedding-guests.csv";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    });
+    $("gimport").addEventListener("click", () => {
+      const res = parseGuestCSV($("gcsv").value, MEAL_CHOICES);
+      const msg = $("gimportMsg");
+      if (res.guests.length) {
+        state.guests = state.guests.concat(res.guests);
+        save(state); render();
+      } else {
+        msg.innerHTML = res.errors.map(e => "<p class='error small'>" + esc(e) + "</p>").join("");
+      }
+      if (res.errors.length && res.guests.length) {
+        alert(res.guests.length + " imported with " + res.errors.length + " warning(s):\n" + res.errors.slice(0, 5).join("\n"));
+      }
     });
     box.querySelectorAll(".gr").forEach(sel => {
       sel.addEventListener("change", () => {
@@ -179,7 +192,8 @@
         "<select data-i='" + i + "' class='vs'>" +
         VENDOR_STAGES.map(s =>
           "<option value='" + s + "'" + (v.status === s ? " selected" : "") + ">" + s + "</option>").join("") +
-        "</select><button data-i='" + i + "' class='vdel'>✕</button></div>"
+        "</select><button data-i='" + i + "' class='vdel'>✕</button>" +
+        "<input data-i='" + i + "' class='vnote' placeholder='Notes — contact name, phone, contract #' value='" + esc(v.notes || "") + "' aria-label='Vendor notes'></div>"
       ).join("") + "</div>";
     $("vadd").addEventListener("click", () => {
       const name = $("vname").value.trim();
@@ -190,6 +204,12 @@
     box.querySelectorAll(".vs").forEach(sel => {
       sel.addEventListener("change", () => {
         state.vendors[Number(sel.dataset.i)].status = sel.value;
+        save(state); render();
+      });
+    });
+    box.querySelectorAll(".vnote").forEach(inp => {
+      inp.addEventListener("change", () => {
+        state.vendors[Number(inp.dataset.i)].notes = inp.value.trim();
         save(state); render();
       });
     });
@@ -206,6 +226,18 @@
     $("apikey").value = (state.settings && state.settings.key) || "";
   }
 
+  function printPlan() {
+    if (!state.weddingDate) { alert("Set your wedding date first."); return; }
+    const w = window.open("", "_blank");
+    if (!w) return;
+    const txt = planSummaryText(state.weddingDate, state.budget, state.guests, state.vendors, BANK);
+    w.document.write("<html><head><title>WeddingPlan summary</title></head><body>" +
+      "<pre style='font-family:monospace;white-space:pre-wrap'>" + esc(txt) + "</pre></body></html>");
+    w.document.close();
+    w.focus();
+    w.print();
+  }
+
   /* ---------- wire up ---------- */
   document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll(".tabbtn").forEach(b =>
@@ -213,6 +245,7 @@
     $("weddate").addEventListener("change", e => {
       state.weddingDate = e.target.value; save(state); render();
     });
+    $("printPlan").addEventListener("click", printPlan);
     $("apikey").addEventListener("change", e => {
       state.settings = state.settings || {};
       state.settings.key = e.target.value.trim(); save(state);

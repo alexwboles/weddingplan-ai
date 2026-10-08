@@ -110,10 +110,127 @@ function weddingNudge(daysLeft) {
   return null;
 }
 
+/** Filter a built timeline by free-text query and/or category. Keeps soonest-first order. */
+function filterTimeline(timeline, query, category) {
+  const q = String(query || "").trim().toLowerCase();
+  return (timeline || []).filter(t => {
+    if (category && t.category !== category) return false;
+    if (!q) return true;
+    return (t.title + " " + t.category + " " + (t.tip || "")).toLowerCase().includes(q);
+  });
+}
+
+/** Distinct task categories present in the bank (for the filter dropdown). */
+function timelineCategories(BANK) {
+  const seen = [];
+  (BANK.WED_TASKS || []).forEach(t => { if (seen.indexOf(t.c) === -1) seen.push(t.c); });
+  return seen;
+}
+
+/** Minimal CSV row splitter honoring double-quoted fields. */
+function splitCSVRow(line) {
+  const out = [];
+  let cur = "", inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (inQ) {
+      if (c === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++; }
+        else inQ = false;
+      } else cur += c;
+    } else if (c === '"') inQ = true;
+    else if (c === ",") { out.push(cur.trim()); cur = ""; }
+    else cur += c;
+  }
+  out.push(cur.trim());
+  return out;
+}
+
+/**
+ * Parse pasted guest CSV into [{name, rsvp, meal, plusOne}].
+ * Header row (name,rsvp,meal,plus_one) optional. meals: allowed meal list.
+ * Returns { guests, errors }.
+ */
+function parseGuestCSV(text, meals) {
+  const errors = [], guests = [];
+  const lines = String(text || "").split(/\r?\n/).map(l => l.trim()).filter(l => l !== "");
+  if (!lines.length) return { guests, errors: ["Nothing to import — paste CSV rows first."] };
+  let start = 0;
+  const head = lines[0].toLowerCase();
+  if (head.includes("name") && (head.includes("rsvp") || head.includes("meal") || head.includes("plus"))) start = 1;
+  const validRsvp = ["invited", "yes", "maybe", "no"];
+  const mealList = meals || [];
+  for (let i = start; i < lines.length; i++) {
+    const cols = splitCSVRow(lines[i]);
+    const name = cols[0] || "";
+    if (!name) { errors.push("Row " + (i + 1) + ": skipped (no name)."); continue; }
+    let rsvp = (cols[1] || "invited").toLowerCase();
+    if (validRsvp.indexOf(rsvp) === -1) {
+      errors.push("Row " + (i + 1) + ": bad RSVP '" + cols[1] + "' — set to invited.");
+      rsvp = "invited";
+    }
+    const meal = cols[2] || "";
+    if (meal && mealList.length && mealList.indexOf(meal) === -1) {
+      errors.push("Row " + (i + 1) + ": unknown meal '" + meal + "' — kept anyway.");
+    }
+    const plusOne = /^(yes|true|1|\+1|y)$/i.test(cols[3] || "");
+    guests.push({ name, rsvp, meal, plusOne });
+  }
+  return { guests, errors };
+}
+
+/** Guests as CSV (name,rsvp,meal,plus_one) — hand it to the caterer. */
+function guestsToCSV(guests) {
+  const esc = v => {
+    const s = String(v == null ? "" : v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const lines = ["name,rsvp,meal,plus_one"];
+  (guests || []).forEach(g => lines.push(
+    [esc(g.name), esc(g.rsvp || "invited"), esc(g.meal || ""), g.plusOne ? "yes" : "no"].join(",")
+  ));
+  return lines.join("\n");
+}
+
+/**
+ * Plain-text whole-plan summary for printing.
+ * BANK: { WED_TASKS, ... } as passed to buildTimeline.
+ */
+function planSummaryText(weddingISO, budget, guests, vendors, BANK, today) {
+  const now = today || todayISO();
+  const dl = daysUntil(weddingISO, now);
+  const tl = buildTimeline(weddingISO, [], now, BANK);
+  const open = tl.filter(t => t.status !== "done");
+  const bt = budgetTotals(budget || []);
+  const rs = rsvpStats(guests || []);
+  const meals = mealStats(guests || []);
+  const vs = vendorStats(vendors || []);
+  const n = weddingNudge(dl);
+  const lines = [];
+  lines.push("WEDDING PLAN SUMMARY — " + weddingISO + " (" + dl + " days to go)");
+  if (n) lines.push(n);
+  lines.push("");
+  lines.push("TIMELINE: " + open.length + " of " + tl.length + " tasks remaining");
+  open.slice(0, 12).forEach(t => lines.push("  [ ] " + t.due + " — " + t.title + " (" + t.status.replace("-", " ") + ")"));
+  if (open.length > 12) lines.push("  …and " + (open.length - 12) + " more");
+  lines.push("");
+  lines.push("BUDGET: $" + bt.spent.toLocaleString("en-US") + " spent of $" + bt.planned.toLocaleString("en-US") +
+    " planned (" + bt.pct + "%)");
+  lines.push("");
+  lines.push("GUESTS: " + rs.expected + " expected (" + rs.yes + " yes / " + rs.total + " invited)");
+  const mealKeys = Object.keys(meals);
+  if (mealKeys.length) lines.push("MEALS: " + mealKeys.map(k => k + " x" + meals[k]).join(", "));
+  lines.push("");
+  lines.push("VENDORS: " + vs.booked + " booked/paid, $" + vs.cost.toLocaleString("en-US") +
+    " committed (" + vs.total + " total)");
+  return lines.join("\n");
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     parseISO, toISO, todayISO, daysUntil,
     buildTimeline, nextTask, budgetTotals, suggestedBudget,
-    rsvpStats, mealStats, vendorStats, weddingNudge
+    rsvpStats, mealStats, vendorStats, weddingNudge,
+    filterTimeline, timelineCategories, parseGuestCSV, guestsToCSV, planSummaryText
   };
 }

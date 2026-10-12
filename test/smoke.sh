@@ -39,7 +39,14 @@ check "timelineCategories covers the bank" node -e "
   if(!cats.includes('venue')||!cats.includes('budget')) throw new Error('missing core cats');"
 check "UI wires filter/import/export/notes/print" bash -c "
   for n in tlSearch tlCat gcsv gimport gexport printPlan filterTimeline parseGuestCSV guestsToCSV planSummaryText vnote; do
-    grep -q \"\$n\" index.html js/app.js js/logic.js || exit 1
+    grep -q "\$n" index.html js/app.js js/logic.js || exit 1
+  done"
+check "new logic API exported (seating/payments/nudges)" node -e "
+  const L=require('./js/logic.js');
+  ['seatingPlan','autoSeat','vendorPayments','rsvpDeadlineISO','rsvpNudges'].forEach(f=>{if(typeof L[f]!=='function')throw new Error('missing '+f)});"
+check "UI wires seating/payments/rsvp-nudge UI" bash -c "
+  for n in tab-seating seating-body renderSeating seatingPlan autoSeat copyNudge rsvpNudges vdep vdepdue vbal vendorPayments tadd autoseat; do
+    grep -q "\$n" index.html js/app.js js/logic.js || exit 1
   done"
 
 echo "--- smoke: $pass passed, $fail failed ---"

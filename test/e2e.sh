@@ -121,5 +121,58 @@ flow "plan summary text covers timeline, budget, guests, vendors" "
   if(txt.indexOf('Chicken x1')===-1) throw new Error('meal counts missing');
 "
 
+flow "seating plan fills tables, counts +1 seats, lists unassigned" "
+  const L=require('./js/logic.js');
+  const tables=[{name:'T1',seats:4},{name:'T2',seats:2}];
+  const guests=[
+    {name:'A',rsvp:'yes',table:'T1'},
+    {name:'B',rsvp:'yes',plusOne:true,table:'T1'},
+    {name:'C',rsvp:'yes',table:'T2'},
+    {name:'D',rsvp:'yes',table:'T2'},
+    {name:'E',rsvp:'yes',table:'T2'},
+    {name:'F',rsvp:'maybe',table:'T1'}
+  ];
+  const plan=L.seatingPlan(guests,tables);
+  if(plan.tables[0].guests.length!==2) throw new Error('T1 should seat 2 entries');
+  if(plan.tables[1].guests.length!==2) throw new Error('T2 holds 2 seats only');
+  if(plan.unassigned.length!==1||plan.unassigned[0].name!=='E') throw new Error('E should be unassigned');
+  if(plan.tables[0].guests[0].gi!==0) throw new Error('gi tracking broken');
+"
+
+flow "autoSeat fills tables greedily for confirmed guests" "
+  const L=require('./js/logic.js');
+  const tables=[{name:'T1',seats:2}];
+  const guests=[{name:'A',rsvp:'yes'},{name:'B',rsvp:'yes',plusOne:true},{name:'C',rsvp:'yes'},{name:'D',rsvp:'no'}];
+  const seated=L.autoSeat(guests,tables);
+  if(seated[0].table!=='T1') throw new Error('A not seated');
+  if(seated[1].table) throw new Error('B+1 needs 2 seats, T1 has 1 left');
+  if(seated[2].table!=='T1') throw new Error('C should take the last seat');
+  if(seated[3].table) throw new Error('declined guest seated');
+  if(guests[0].table) throw new Error('autoSeat mutated input');
+"
+
+flow "vendor payments: deposits, balance, overdue detection" "
+  const L=require('./js/logic.js');
+  const vendors=[
+    {name:'Venue',cost:8000,deposit:2000,depositDue:'2026-01-01',balanceDue:'2026-06-01',status:'booked'},
+    {name:'Photo',cost:3000,deposit:3000,status:'paid'},
+    {name:'Band',cost:2500,status:'researching'}
+  ];
+  const p=L.vendorPayments(vendors,'2026-10-12');
+  if(p.committed!==11000) throw new Error('committed '+p.committed);
+  if(p.depositsPaid!==5000) throw new Error('deposits '+p.depositsPaid);
+  if(p.balance!==6000) throw new Error('balance '+p.balance);
+  if(p.overdue.length!==1||p.overdue[0].name!=='Venue') throw new Error('overdue wrong');
+"
+
+flow "rsvp nudges: 28-day deadline, pending list" "
+  const L=require('./js/logic.js');
+  if(L.rsvpDeadlineISO('2027-09-28')!=='2027-08-31') throw new Error('deadline wrong: '+L.rsvpDeadlineISO('2027-09-28'));
+  const n=L.rsvpNudges([{name:'A',rsvp:'yes'},{name:'B',rsvp:'invited'},{name:'C',rsvp:'maybe'},{name:'D',rsvp:'no'}],'2027-09-28','2026-09-28');
+  if(n.pending.length!==2||n.pending[0]!=='B') throw new Error('pending wrong');
+  if(n.daysLeft!==337) throw new Error('daysLeft '+n.daysLeft);
+  if(L.rsvpNudges([],'')!==null) throw new Error('should be null without date');
+"
+
 echo "--- e2e: $pass passed, $fail failed ---"
 exit $((fail>0))

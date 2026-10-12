@@ -231,6 +231,86 @@ if (typeof module !== "undefined" && module.exports) {
     parseISO, toISO, todayISO, daysUntil,
     buildTimeline, nextTask, budgetTotals, suggestedBudget,
     rsvpStats, mealStats, vendorStats, weddingNudge,
-    filterTimeline, timelineCategories, parseGuestCSV, guestsToCSV, planSummaryText
+    filterTimeline, timelineCategories, parseGuestCSV, guestsToCSV, planSummaryText,
+    seatingPlan, autoSeat, vendorPayments, rsvpDeadlineISO, rsvpNudges
   };
+}
+
+/* ---------------------------------------------------------------------------
+ * Seating planner — tables: [{name, seats}]; guests seat via g.table.
+ * Only confirmed (rsvp "yes") guests are seated; a +1 takes a second seat.
+ * seatingPlan reports per-table occupancy + an unassigned list.
+ * autoSeat greedily assigns confirmed guests to open seats, returns new guests.
+ * --------------------------------------------------------------------------- */
+function seatingPlan(guests, tables) {
+  const ts = (tables || []).map(t => ({
+    name: t.name, seats: Math.max(0, Number(t.seats) || 0), guests: []
+  }));
+  const unassigned = [];
+  (guests || []).forEach((g, gi) => {
+    if (g.rsvp !== "yes") return;
+    const need = 1 + (g.plusOne ? 1 : 0);
+    const t = ts.find(x => x.name === g.table);
+    const entry = { name: g.name, seats: need, gi };
+    if (t && t.guests.reduce((s, x) => s + x.seats, 0) + need <= t.seats) {
+      t.guests.push(entry);
+    } else {
+      unassigned.push(entry);
+    }
+  });
+  return { tables: ts, unassigned };
+}
+
+function autoSeat(guests, tables) {
+  const open = (tables || []).map(t => ({ name: t.name, open: Math.max(0, Number(t.seats) || 0) }));
+  return (guests || []).map(g => {
+    if (g.rsvp !== "yes") return g;
+    const need = 1 + (g.plusOne ? 1 : 0);
+    const t = open.find(x => x.open >= need);
+    if (!t) return g;
+    t.open -= need;
+    return Object.assign({}, g, { table: t.name });
+  });
+}
+
+/* ---------------------------------------------------------------------------
+ * Vendor payments — vendors may carry deposit (paid), depositDue, balanceDue.
+ * vendorPayments reports committed/deposits-paid/balance + overdue vendors.
+ * --------------------------------------------------------------------------- */
+function vendorPayments(vendors, today) {
+  const now = today || todayISO();
+  let committed = 0, depositsPaid = 0, balance = 0;
+  const overdue = [];
+  (vendors || []).forEach(v => {
+    if (v.status !== "booked" && v.status !== "paid") return;
+    const cost = Number(v.cost) || 0;
+    const dep = Math.min(Math.max(0, Number(v.deposit) || 0), cost);
+    committed += cost;
+    depositsPaid += dep;
+    balance += cost - dep;
+    const balLeft = cost - dep;
+    if ((v.depositDue && v.depositDue < now && dep <= 0) ||
+        (v.balanceDue && v.balanceDue < now && balLeft > 0)) {
+      overdue.push(v);
+    }
+  });
+  return { committed, depositsPaid, balance, overdue };
+}
+
+/* ---------------------------------------------------------------------------
+ * RSVP deadline — 28 days before the wedding by default.
+ * rsvpNudges lists invited/maybe guests who still owe an answer.
+ * --------------------------------------------------------------------------- */
+function rsvpDeadlineISO(weddingISO) {
+  return toISO(new Date(parseISO(weddingISO).getTime() - 28 * 86400000));
+}
+
+function rsvpNudges(guests, weddingISO, today) {
+  if (!weddingISO) return null;
+  const deadline = rsvpDeadlineISO(weddingISO);
+  const daysLeft = daysUntil(deadline, today || todayISO());
+  const pending = (guests || [])
+    .filter(g => g.rsvp === "invited" || g.rsvp === "maybe")
+    .map(g => g.name);
+  return { deadline, daysLeft, pending };
 }

@@ -234,3 +234,36 @@ footer p { text-align: center; }
   .bignum { font-size: 30px; }
   .bline input[type="number"] { width: 88px; }
 }
+
+/* ---------- feature batch: RSVP nudges, vendor payments, seating ---------- */
+.rsvpbanner {
+  border: 1px solid var(--line); background: #fffdf6; border-radius: 0;
+  padding: 10px 14px; margin: 10px 0; font-size: 13.5px;
+}
+.rsvpbanner.hot { border-left: 4px solid #b34100; }
+.ghostbtn.small { font-size: 12px; padding: 4px 10px; }
+.payline { font-size: 14px; margin: 6px 0 12px; color: var(--ink-soft, #555); }
+.payline strong { color: var(--ink, #222); }
+.overdue { color: #b34100; font-weight: 700; }
+.vpay {
+  display: flex; flex-wrap: wrap; gap: 10px; width: 100%;
+  font-size: 12.5px; color: var(--muted, #777); margin-top: 6px;
+}
+.vpay label { display: inline-flex; align-items: center; gap: 5px; }
+.vpay input { width: 110px; }
+#tlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin: 14px 0; }
+.tcard { border: 1px solid var(--line); border-radius: 0; background: #fffdf6; padding: 12px 14px; }
+.thead { display: flex; align-items: baseline; gap: 8px; }
+.thead .tdel { margin-left: auto; }
+.tbar { height: 8px; background: #e9e0c8; border-radius: 0; margin: 8px 0; overflow: hidden; }
+.tbar i { display: block; height: 100%; background: var(--gold, #b98a2f); }
+.tguests { display: flex; flex-wrap: wrap; gap: 6px; }
+.tguest {
+  font-size: 12.5px; border: 1px solid var(--line); background: #fff;
+  padding: 3px 8px; border-radius: 0; display: inline-flex; gap: 6px; align-items: center;
+}
+.tguest button, .gdel, .vdel, .tdel {
+  border: none; background: none; color: #a33; cursor: pointer; font-size: 12px; padding: 0 2px;
+}
+#unlist .gline { max-width: 560px; }
+.gtable { margin-left: auto; }

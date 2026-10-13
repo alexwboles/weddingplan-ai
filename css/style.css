@@ -282,3 +282,13 @@ footer p { text-align: center; }
 .sline span:nth-child(2) { flex: 1; font-weight: 600; }
 .sline.conflict { border-left: 4px solid #b91c1c; background: #fdf3f2; }
 .sdel { border: none; background: none; cursor: pointer; color: #a33b2e; font-size: 14px; }
+
+/* ---------- day-of timeline ---------- */
+.dline{position:relative;margin-top:.6rem}
+.drow{align-items:flex-start}
+.sbody{flex:1;min-width:0}
+.stitle{display:flex;align-items:center;gap:.6rem;font-weight:600}
+.stitle .sdel{margin-left:auto}
+.sbar{height:8px;background:#efe7d8;margin:.45rem 0 .3rem;overflow:hidden}
+.sbar i{display:block;height:100%;background:var(--gold)}
+.drow.conflict .sbar i{background:#b91c1c}

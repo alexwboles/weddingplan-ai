@@ -306,6 +306,27 @@ function budgetAlerts(lines) {
     .sort((a, b) => b.over - a.over);
 }
 
+/** End of an event in minutes since midnight. Pure. */
+function eventEndMin(ev) { return timeToMin(ev.time) + Math.max(0, Number(ev.minutes) || 0); }
+
+/** Day span of a schedule: first start to last end. Pure.
+    Returns {startMin, endMin, start, end, label} or null when empty. */
+function scheduleSpan(events) {
+  const evs = (events || []).filter(e => e && /^([01]\d|2[0-3]):[0-5]\d$/.test(String(e.time || "")));
+  if (!evs.length) return null;
+  const starts = evs.map(e => timeToMin(e.time));
+  const ends = evs.map(e => eventEndMin(e));
+  const startMin = Math.min.apply(null, starts);
+  const endMin = Math.max.apply(null, ends);
+  const p2 = n => String(n).padStart(2, "0");
+  const fmt = m => p2(Math.floor(m / 60) % 24) + ":" + p2(m % 60);
+  const hrs = Math.floor((endMin - startMin) / 60), mins = (endMin - startMin) % 60;
+  return {
+    startMin, endMin, start: fmt(startMin), end: fmt(endMin),
+    label: fmt(startMin) + "–" + fmt(endMin) + " · " + hrs + "h " + mins + "m day"
+  };
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     parseISO, toISO, todayISO, daysUntil,
@@ -313,7 +334,7 @@ if (typeof module !== "undefined" && module.exports) {
     rsvpStats, mealStats, vendorStats, weddingNudge,
     filterTimeline, timelineCategories, parseGuestCSV, guestsToCSV, planSummaryText,
     seatingPlan, autoSeat, vendorPayments, rsvpDeadlineISO, rsvpNudges,
-    makeScheduleEvent, sortSchedule, scheduleConflicts, scheduleTotal,
+    makeScheduleEvent, sortSchedule, scheduleConflicts, scheduleTotal, eventEndMin, scheduleSpan,
     dietaryStats, budgetAlerts
   };
 }

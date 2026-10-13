@@ -223,5 +223,12 @@ flow "budgetAlerts flags over-plan categories, biggest overage first" "
   if(L.budgetAlerts([]).length) throw new Error('empty -> none');
 "
 
+flow "day-of timeline: span covers the full run of events" "
+  const L=require('./js/logic.js');
+  const evs=[L.makeScheduleEvent({time:'09:00',title:'Hair',minutes:180}),L.makeScheduleEvent({time:'18:00',title:'Reception',minutes:240})];
+  const sp=L.scheduleSpan(evs);
+  if(sp.startMin!==540||sp.endMin!==1320) throw new Error(JSON.stringify(sp));
+  if(L.scheduleTotal(evs)!==420) throw new Error('total');"
+
 echo "--- e2e: $pass passed, $fail failed ---"
 exit $((fail>0))

@@ -59,5 +59,19 @@ check "UI wires day-of schedule, diet field, budget alerts" bash -c "
     grep -q \"\$n\" index.html js/app.js js/logic.js || exit 1
   done"
 
+check "schedule timeline in app.js" grep -q "sbar" js/app.js
+check "day-of duration bars in app.js" grep -q "drow" js/app.js
+check "scheduleSpan in logic.js" grep -q "function scheduleSpan" js/logic.js
+check "timeline CSS present" grep -q ".sbar" css/style.css
+check "scheduleSpan logic" node -e "
+  const L = require('./js/logic.js');
+  const evs = [ L.makeScheduleEvent({ time: '09:00', title: 'Hair', minutes: 180 }), L.makeScheduleEvent({ time: '16:00', title: 'Ceremony', minutes: 45 }) ];
+  const sp = L.scheduleSpan(evs);
+  if (!sp || sp.start !== '09:00' || sp.end !== '16:45') throw new Error('span: ' + JSON.stringify(sp));
+  if (L.eventEndMin(evs[0]) !== 720) throw new Error('end min');
+  if (L.scheduleSpan([]) !== null) throw new Error('empty should be null');
+  if (L.scheduleSpan([{ time: 'bad' }]) !== null) throw new Error('bad times filtered');
+"
+
 echo "--- smoke: $pass passed, $fail failed ---"
 exit $((fail>0))

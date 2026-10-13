@@ -158,22 +158,29 @@
     const flagged = new Set();
     conflicts.forEach(c => { flagged.add(c.a.id); flagged.add(c.b.id); });
     const hrs = Math.floor(total / 60), mins = total % 60;
+    const span = scheduleSpan(sorted);
+    const dayMin = span ? (span.endMin - span.startMin) : 0;
+    const fmtT = (m) => String(Math.floor(m / 60) % 24).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
     box.innerHTML =
       "<p class='muted'>The wedding-day run of events, in order. Overlaps are flagged so the day flows.</p>" +
       (conflicts.length ? "<p class='error small'>⚠ " + conflicts.length + " overlap" + (conflicts.length === 1 ? "" : "s") + ": " +
         conflicts.slice(0, 3).map(c => esc(c.a.title) + " × " + esc(c.b.title)).join("; ") + "</p>" : "") +
-      (sorted.length ? "<p class='muted'>" + sorted.length + " event" + (sorted.length === 1 ? "" : "s") + " · " + hrs + "h " + mins + "m scheduled</p>" : "") +
+      (sorted.length ? "<p class='muted'>" + sorted.length + " event" + (sorted.length === 1 ? "" : "s") + " · " + hrs + "h " + mins + "m scheduled" +
+        (span ? " · day runs <strong>" + span.label + "</strong>" : "") + "</p>" : "") +
       "<div class='row'><input id='stime' type='time' value='14:00' aria-label='Start time'>" +
       "<input id='stitle' placeholder='Event — e.g. Ceremony' maxlength='80'>" +
       "<input id='smin' type='number' min='5' max='720' value='30' style='width:90px' aria-label='Duration in minutes'>" +
       "<button id='sadd'>Add event</button></div>" +
-      "<div id='slist'>" + (sorted.length ? sorted.map(e =>
-        "<div class='sline" + (flagged.has(e.id) ? " conflict" : "") + "'>" +
-        "<span class='stime'>" + esc(e.time) + "</span>" +
-        "<span>" + esc(e.title) + "</span>" +
-        "<span class='muted small'>" + e.minutes + " min</span>" +
-        "<button data-id='" + esc(e.id) + "' class='sdel' title='Remove event'>✕</button></div>"
-      ).join("") : "<p class='muted'>No events yet — add the ceremony, photos, reception, and everything between.</p>") + "</div>";
+      "<div id='slist' class='dline'>" + (sorted.length ? sorted.map(e => {
+        const end = eventEndMin(e);
+        const w = dayMin > 0 ? Math.max(4, Math.round(e.minutes / dayMin * 100)) : 4;
+        return "<div class='sline drow" + (flagged.has(e.id) ? " conflict" : "") + "'>" +
+          "<span class='stime'>" + esc(e.time) + "</span>" +
+          "<div class='sbody'><div class='stitle'>" + esc(e.title) +
+          "<button data-id='" + esc(e.id) + "' class='sdel' title='Remove event'>✕</button></div>" +
+          "<div class='sbar'><i style='width:" + w + "%'></i></div>" +
+          "<span class='muted small'>" + e.minutes + " min · ends " + fmtT(end) + "</span></div></div>";
+      }).join("") : "<p class='muted'>No events yet — add the ceremony, photos, reception, and everything between.</p>") + "</div>";
     $("sadd").addEventListener("click", () => {
       try {
         const ev = makeScheduleEvent({ time: $("stime").value, title: $("stitle").value, minutes: $("smin").value });

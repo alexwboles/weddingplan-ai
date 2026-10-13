@@ -101,11 +101,13 @@ flow "guest CSV export round-trips names with commas" "
   const guests=[{name:'Smith, Bob',rsvp:'yes',meal:'Fish',plusOne:false},{name:'Jane',rsvp:'maybe',meal:'',plusOne:true}];
   const csv=L.guestsToCSV(guests);
   const lines=csv.split('\n');
-  if(lines[0]!=='name,rsvp,meal,plus_one') throw new Error('bad header');
+  if(lines[0]!=='name,rsvp,meal,plus_one,diet') throw new Error('bad header: '+lines[0]);
   if(lines.length!==3) throw new Error('line count '+lines.length);
-  if(lines[1]!=='\"Smith, Bob\",yes,Fish,no') throw new Error('escape wrong: '+lines[1]);
+  if(lines[1]!=='\"Smith, Bob\",yes,Fish,no,') throw new Error('escape wrong: '+lines[1]);
   const back=L.parseGuestCSV(csv,B.MEAL_CHOICES);
   if(back.guests.length!==2||back.guests[0].name!=='Smith, Bob') throw new Error('round-trip failed');
+  const wd=L.parseGuestCSV('name,rsvp,meal,plus_one,diet\\nJane,yes,Chicken,no,Gluten-free',B.MEAL_CHOICES);
+  if(wd.guests[0].diet!=='Gluten-free') throw new Error('diet column not parsed');
 "
 
 flow "plan summary text covers timeline, budget, guests, vendors" "
@@ -172,6 +174,53 @@ flow "rsvp nudges: 28-day deadline, pending list" "
   if(n.pending.length!==2||n.pending[0]!=='B') throw new Error('pending wrong');
   if(n.daysLeft!==337) throw new Error('daysLeft '+n.daysLeft);
   if(L.rsvpNudges([],'')!==null) throw new Error('should be null without date');
+"
+
+flow "day-of schedule: validation, sorting, conflict detection" "
+  const L=require('./js/logic.js');
+  const e1=L.makeScheduleEvent({time:'14:00',title:'Ceremony',minutes:45});
+  if(e1.time!=='14:00'||e1.minutes!==45) throw new Error('event wrong');
+  let threw=0;
+  try{L.makeScheduleEvent({time:'2pm',title:'x'})}catch(e){threw++}
+  try{L.makeScheduleEvent({time:'14:00',title:'  '})}catch(e){threw++}
+  if(threw!==2) throw new Error('expected 2 rejections');
+  const srt=L.sortSchedule([{time:'16:00',title:'B'},{time:'14:00',title:'A'}]);
+  if(srt[0].title!=='A') throw new Error('not sorted');
+  const conf=L.scheduleConflicts([
+    {time:'14:00',title:'Ceremony',minutes:60},
+    {time:'14:30',title:'Photos',minutes:30},
+    {time:'16:00',title:'Reception',minutes:120}
+  ]);
+  if(conf.length!==1||conf[0].a.title!=='Ceremony'||conf[0].b.title!=='Photos') throw new Error('conflict wrong: '+JSON.stringify(conf));
+  const clean=L.scheduleConflicts([{time:'14:00',title:'A',minutes:30},{time:'14:30',title:'B',minutes:30}]);
+  if(clean.length) throw new Error('back-to-back is not a conflict');
+  if(L.scheduleTotal([{minutes:45},{minutes:15}])!==60) throw new Error('total wrong');
+"
+
+flow "dietaryStats counts confirmed guests with diet notes" "
+  const L=require('./js/logic.js');
+  const d=L.dietaryStats([
+    {name:'A',rsvp:'yes',diet:'Gluten-free'},
+    {name:'B',rsvp:'yes',diet:'gluten-free'},
+    {name:'C',rsvp:'invited',diet:'Vegan'},
+    {name:'D',rsvp:'yes',diet:''},
+    {name:'E',rsvp:'no',diet:'Nut allergy'}
+  ]);
+  if(d['Gluten-free']!==1||d['gluten-free']!==1) throw new Error('case kept distinct: '+JSON.stringify(d));
+  if(Object.keys(d).length!==2) throw new Error('only confirmed with notes: '+JSON.stringify(d));
+"
+
+flow "budgetAlerts flags over-plan categories, biggest overage first" "
+  const L=require('./js/logic.js');
+  const a=L.budgetAlerts([
+    {category:'venue',planned:9000,spent:9500},
+    {category:'catering',planned:7500,spent:7000},
+    {category:'music',planned:1800,spent:2400}
+  ]);
+  if(a.length!==2) throw new Error('want 2, got '+a.length);
+  if(a[0].category!=='music'||a[0].over!==600) throw new Error('sort wrong: '+JSON.stringify(a));
+  if(a[1].category!=='venue'||a[1].over!==500) throw new Error('venue wrong');
+  if(L.budgetAlerts([]).length) throw new Error('empty -> none');
 "
 
 echo "--- e2e: $pass passed, $fail failed ---"

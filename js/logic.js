@@ -174,20 +174,21 @@ function parseGuestCSV(text, meals) {
       errors.push("Row " + (i + 1) + ": unknown meal '" + meal + "' — kept anyway.");
     }
     const plusOne = /^(yes|true|1|\+1|y)$/i.test(cols[3] || "");
-    guests.push({ name, rsvp, meal, plusOne });
+    const diet = (cols[4] || "").trim();
+    guests.push({ name, rsvp, meal, plusOne, diet });
   }
   return { guests, errors };
 }
 
-/** Guests as CSV (name,rsvp,meal,plus_one) — hand it to the caterer. */
+/** Guests as CSV (name,rsvp,meal,plus_one,diet) — hand it to the caterer. */
 function guestsToCSV(guests) {
   const esc = v => {
     const s = String(v == null ? "" : v);
     return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   };
-  const lines = ["name,rsvp,meal,plus_one"];
+  const lines = ["name,rsvp,meal,plus_one,diet"];
   (guests || []).forEach(g => lines.push(
-    [esc(g.name), esc(g.rsvp || "invited"), esc(g.meal || ""), g.plusOne ? "yes" : "no"].join(",")
+    [esc(g.name), esc(g.rsvp || "invited"), esc(g.meal || ""), g.plusOne ? "yes" : "no", esc(g.diet || "")].join(",")
   ));
   return lines.join("\n");
 }
@@ -226,13 +227,94 @@ function planSummaryText(weddingISO, budget, guests, vendors, BANK, today) {
   return lines.join("\n");
 }
 
+/* ---------------------------------------------------------------------------
+ * Day-of schedule — timed events for the wedding day with conflict detection.
+ * events: [{time: "HH:MM", title, minutes}]. Pure functions; UI persists state.
+ * --------------------------------------------------------------------------- */
+
+/** Validate + normalize a schedule event. Throws on bad input. */
+function makeScheduleEvent(data) {
+  const time = String((data && data.time) || "").trim();
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) throw new Error("time must be HH:MM (24h)");
+  const title = String((data && data.title) || "").trim();
+  if (!title) throw new Error("event needs a title");
+  if (title.length > 80) throw new Error("title too long (max 80)");
+  let minutes = Number(data && data.minutes);
+  if (!isFinite(minutes) || minutes < 5) minutes = 30;
+  if (minutes > 720) minutes = 720;
+  return { time, title, minutes: Math.round(minutes) };
+}
+
+function timeToMin(t) {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+}
+
+/** Events sorted by start time (returns a new array). */
+function sortSchedule(events) {
+  return (events || []).slice().sort((a, b) => timeToMin(a.time) - timeToMin(b.time) || a.title.localeCompare(b.title));
+}
+
+/**
+ * Overlapping event pairs: [{a, b}] where a starts before b ends.
+ * Expects sorted or unsorted events; indexes refer to the sorted order.
+ */
+function scheduleConflicts(events) {
+  const s = sortSchedule(events);
+  const out = [];
+  for (let i = 0; i < s.length; i++) {
+    const endI = timeToMin(s[i].time) + s[i].minutes;
+    for (let j = i + 1; j < s.length; j++) {
+      if (timeToMin(s[j].time) < endI) out.push({ a: s[i], b: s[j] });
+      else break;
+    }
+  }
+  return out;
+}
+
+/** Total scheduled minutes (sum of durations). */
+function scheduleTotal(events) {
+  return (events || []).reduce((s, e) => s + (Number(e.minutes) || 0), 0);
+}
+
+/* ---------------------------------------------------------------------------
+ * Dietary restrictions — per-guest diet notes, counted for the caterer.
+ * --------------------------------------------------------------------------- */
+
+/** Counts of diet notes among confirmed (rsvp "yes") guests. */
+function dietaryStats(guests) {
+  const counts = {};
+  (guests || []).filter(g => g.rsvp === "yes" && (g.diet || "").trim()).forEach(g => {
+    const d = g.diet.trim();
+    counts[d] = (counts[d] || 0) + 1;
+  });
+  return counts;
+}
+
+/* ---------------------------------------------------------------------------
+ * Budget over-run alerts — categories where spending passed the plan.
+ * --------------------------------------------------------------------------- */
+
+/** Lines where spent > planned: [{category, planned, spent, over}]. */
+function budgetAlerts(lines) {
+  return (lines || [])
+    .filter(l => (Number(l.spent) || 0) > (Number(l.planned) || 0))
+    .map(l => ({
+      category: l.category, planned: Number(l.planned) || 0,
+      spent: Number(l.spent) || 0, over: (Number(l.spent) || 0) - (Number(l.planned) || 0)
+    }))
+    .sort((a, b) => b.over - a.over);
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     parseISO, toISO, todayISO, daysUntil,
     buildTimeline, nextTask, budgetTotals, suggestedBudget,
     rsvpStats, mealStats, vendorStats, weddingNudge,
     filterTimeline, timelineCategories, parseGuestCSV, guestsToCSV, planSummaryText,
-    seatingPlan, autoSeat, vendorPayments, rsvpDeadlineISO, rsvpNudges
+    seatingPlan, autoSeat, vendorPayments, rsvpDeadlineISO, rsvpNudges,
+    makeScheduleEvent, sortSchedule, scheduleConflicts, scheduleTotal,
+    dietaryStats, budgetAlerts
   };
 }
 

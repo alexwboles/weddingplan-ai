@@ -267,3 +267,18 @@ footer p { text-align: center; }
 }
 #unlist .gline { max-width: 560px; }
 .gtable { margin-left: auto; }
+
+/* --- budget tab (was missing entirely) -------------------------------------- */
+.bline.over { border-left: 4px solid #b91c1c; }
+.budgetalerts { margin: 0 0 12px; }
+.bline .bar { flex: 1; margin: 0; min-width: 120px; }
+
+/* --- day-of schedule ---------------------------------------------------------- */
+.sline {
+  display: flex; align-items: center; gap: 12px; background: var(--card);
+  border: 1px solid var(--line); border-radius: 0; padding: 10px 16px; margin-bottom: 8px;
+}
+.sline .stime { font-family: var(--mono); font-weight: 700; font-size: 15px; min-width: 56px; }
+.sline span:nth-child(2) { flex: 1; font-weight: 600; }
+.sline.conflict { border-left: 4px solid #b91c1c; background: #fdf3f2; }
+.sdel { border: none; background: none; cursor: pointer; color: #a33b2e; font-size: 14px; }

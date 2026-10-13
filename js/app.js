@@ -10,11 +10,12 @@
     catch (e) { return blank(); }
   }
   function blank() {
-    return { weddingDate: "", done: [], budget: [], guests: [], vendors: [], tables: [], settings: {} };
+    return { weddingDate: "", done: [], budget: [], guests: [], vendors: [], tables: [], schedule: [], settings: {} };
   }
   function save(s) { localStorage.setItem(KEY, JSON.stringify(s)); }
 
   let state = load();
+  if (!Array.isArray(state.schedule)) state.schedule = []; // pre-schedule saves
   let tab = "timeline";
   let tlQuery = "", tlCat = "";
 
@@ -36,7 +37,7 @@
     renderHeader();
     document.querySelectorAll(".tabbtn").forEach(b =>
       b.classList.toggle("active", b.dataset.tab === tab));
-    ["timeline", "budget", "guests", "vendors", "seating"].forEach(t => {
+    ["timeline", "budget", "guests", "vendors", "seating", "dayof"].forEach(t => {
       $("tab-" + t).style.display = t === tab ? "" : "none";
     });
     if (tab === "timeline") renderTimeline();
@@ -44,6 +45,7 @@
     if (tab === "guests") renderGuests();
     if (tab === "vendors") renderVendors();
     if (tab === "seating") renderSeating();
+    if (tab === "dayof") renderSchedule();
   }
 
   function renderHeader() {
@@ -107,10 +109,92 @@
     });
   }
 
+  /* The Budget tab was wired in the nav but never implemented — clicking it
+     threw. It now exists: total-budget auto-split across categories,
+     per-category planned/spent editing, roll-up, and over-run alerts. */
+  function renderBudget() {
+    const box = $("budget-body");
+    const bt = budgetTotals(state.budget);
+    const alerts = budgetAlerts(state.budget);
+    box.innerHTML =
+      "<div class='bignum'>" + money(bt.spent) + " <span class='muted'>spent of " + money(bt.planned) + " planned (" + bt.pct + "%)</span></div>" +
+      (alerts.length ? "<div class='budgetalerts'>" + alerts.map(a =>
+        "<p class='error small'>⚠ " + esc(a.category) + " is over plan by " + money(a.over) +
+        " (" + money(a.spent) + " spent / " + money(a.planned) + " planned)</p>").join("") + "</div>" : "") +
+      "<div class='row'><input id='btotal' type='number' min='0' placeholder='Total budget — e.g. 30000'>" +
+      "<button id='bsplit'>Auto-split by category</button></div>" +
+      "<div id='blines'>" + state.budget.map((l, i) => {
+        const pct = l.planned > 0 ? Math.min(100, Math.round((l.spent / l.planned) * 100)) : 0;
+        const over = (l.spent || 0) > (l.planned || 0);
+        return "<div class='bline" + (over ? " over" : "") + "'>" +
+          "<span class='bcat'>" + esc(l.label || l.category) + "</span>" +
+          "<label class='small'>Planned <input type='number' min='0' data-i='" + i + "' data-f='planned' value='" + (l.planned || 0) + "'></label>" +
+          "<label class='small'>Spent <input type='number' min='0' data-i='" + i + "' data-f='spent' value='" + (l.spent || 0) + "'></label>" +
+          "<span class='bar'><span class='fill' style='width:" + pct + "%" + (over ? ";background:#b91c1c" : "") + "'></span></span></div>";
+      }).join("") + "</div>" +
+      (state.budget.length ? "" : "<p class='muted'>No budget yet — enter a total above and auto-split it, or add the timeline's first task: “Set your total budget”.</p>");
+    $("bsplit").addEventListener("click", () => {
+      const total = Number($("btotal").value);
+      if (!(total > 0)) { alert("Enter a total budget first."); return; }
+      state.budget = suggestedBudget(total, BANK.BUDGET_CATEGORIES);
+      save(state); render();
+    });
+    box.querySelectorAll("#blines input").forEach(inp => {
+      inp.addEventListener("change", () => {
+        const line = state.budget[Number(inp.dataset.i)];
+        if (!line) return;
+        line[inp.dataset.f] = Math.max(0, Number(inp.value) || 0);
+        save(state); render();
+      });
+    });
+  }
+
+  /* Day-of schedule: timed run-of-events with overlap detection. */
+  function renderSchedule() {
+    const box = $("tab-dayof");
+    const sorted = sortSchedule(state.schedule);
+    const conflicts = scheduleConflicts(state.schedule);
+    const total = scheduleTotal(state.schedule);
+    const flagged = new Set();
+    conflicts.forEach(c => { flagged.add(c.a.id); flagged.add(c.b.id); });
+    const hrs = Math.floor(total / 60), mins = total % 60;
+    box.innerHTML =
+      "<p class='muted'>The wedding-day run of events, in order. Overlaps are flagged so the day flows.</p>" +
+      (conflicts.length ? "<p class='error small'>⚠ " + conflicts.length + " overlap" + (conflicts.length === 1 ? "" : "s") + ": " +
+        conflicts.slice(0, 3).map(c => esc(c.a.title) + " × " + esc(c.b.title)).join("; ") + "</p>" : "") +
+      (sorted.length ? "<p class='muted'>" + sorted.length + " event" + (sorted.length === 1 ? "" : "s") + " · " + hrs + "h " + mins + "m scheduled</p>" : "") +
+      "<div class='row'><input id='stime' type='time' value='14:00' aria-label='Start time'>" +
+      "<input id='stitle' placeholder='Event — e.g. Ceremony' maxlength='80'>" +
+      "<input id='smin' type='number' min='5' max='720' value='30' style='width:90px' aria-label='Duration in minutes'>" +
+      "<button id='sadd'>Add event</button></div>" +
+      "<div id='slist'>" + (sorted.length ? sorted.map(e =>
+        "<div class='sline" + (flagged.has(e.id) ? " conflict" : "") + "'>" +
+        "<span class='stime'>" + esc(e.time) + "</span>" +
+        "<span>" + esc(e.title) + "</span>" +
+        "<span class='muted small'>" + e.minutes + " min</span>" +
+        "<button data-id='" + esc(e.id) + "' class='sdel' title='Remove event'>✕</button></div>"
+      ).join("") : "<p class='muted'>No events yet — add the ceremony, photos, reception, and everything between.</p>") + "</div>";
+    $("sadd").addEventListener("click", () => {
+      try {
+        const ev = makeScheduleEvent({ time: $("stime").value, title: $("stitle").value, minutes: $("smin").value });
+        ev.id = "s" + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
+        state.schedule.push(ev);
+        save(state); render();
+      } catch (err) { alert("⚠ " + err.message); }
+    });
+    box.querySelectorAll(".sdel").forEach(btn => {
+      btn.addEventListener("click", () => {
+        state.schedule = state.schedule.filter(e => e.id !== btn.dataset.id);
+        save(state); render();
+      });
+    });
+  }
+
   function renderGuests() {
     const box = $("guests-body");
     const st = rsvpStats(state.guests);
     const meals = mealStats(state.guests);
+    const diets = dietaryStats(state.guests);
     const mealOpts = MEAL_CHOICES.map(m => "<option>" + m + "</option>").join("");
     const rn = rsvpNudges(state.guests, state.weddingDate);
     const rsvpBanner = rn
@@ -129,15 +213,18 @@
       rsvpBanner +
       (Object.keys(meals).length ? "<p class='muted'>Meal choices: " +
         Object.entries(meals).map(([m, c]) => esc(m) + " × " + c).join(" · ") + "</p>" : "") +
+      (Object.keys(diets).length ? "<p class='muted'>Dietary needs (confirmed guests): " +
+        Object.entries(diets).map(([d, c]) => esc(d) + " × " + c).join(" · ") + "</p>" : "") +
       "<div class='row'><input id='gname' placeholder='Guest name'>" +
       "<select id='grsvp'><option value='invited'>invited</option><option value='yes'>yes</option>" +
       "<option value='maybe'>maybe</option><option value='no'>no</option></select>" +
       "<select id='gmeal'>" + mealOpts + "</select>" +
+      "<input id='gdiet' placeholder='Dietary needs (optional)' maxlength='60'>" +
       "<label class='inline'><input id='gplus' type='checkbox'> +1</label>" +
       "<button id='gadd'>Add guest</button>" +
       "<button id='gexport' class='ghostbtn'>Export CSV</button></div>" +
       "<details class='csvimport'><summary>Import guests from CSV</summary>" +
-      "<p class='muted small'>Paste rows as <code>name,rsvp,meal,plus_one</code> — e.g. <code>Jane Doe,yes,Chicken,yes</code>. Header row optional.</p>" +
+      "<p class='muted small'>Paste rows as <code>name,rsvp,meal,plus_one,diet</code> — e.g. <code>Jane Doe,yes,Chicken,yes,Gluten-free</code>. Header row optional; diet may be left blank.</p>" +
       "<textarea id='gcsv' rows='4' placeholder='name,rsvp,meal,plus_one'></textarea>" +
       "<div class='row'><button id='gimport'>Import</button></div>" +
       "<div id='gimportMsg'></div></details>" +
@@ -146,14 +233,15 @@
         "<select data-i='" + i + "' class='gr'>" +
         ["invited", "yes", "maybe", "no"].map(r =>
           "<option value='" + r + "'" + (g.rsvp === r ? " selected" : "") + ">" + r + "</option>").join("") +
-        "</select><span class='muted small'>" + esc(g.meal || "") + (g.plusOne ? " · +1" : "") + "</span>" +
+        "</select><span class='muted small'>" + esc(g.meal || "") + (g.plusOne ? " · +1" : "") + (g.diet ? " · " + esc(g.diet) : "") + "</span>" +
         "<button data-i='" + i + "' class='gdel'>✕</button></div>"
       ).join("") + "</div>";
     $("gadd").addEventListener("click", () => {
       const name = $("gname").value.trim();
       if (!name) return;
       state.guests.push({
-        name, rsvp: $("grsvp").value, meal: $("gmeal").value, plusOne: $("gplus").checked
+        name, rsvp: $("grsvp").value, meal: $("gmeal").value, plusOne: $("gplus").checked,
+        diet: $("gdiet").value.trim()
       });
       save(state); render();
     });

@@ -49,5 +49,15 @@ check "UI wires seating/payments/rsvp-nudge UI" bash -c "
     grep -q "\$n" index.html js/app.js js/logic.js || exit 1
   done"
 
+check "budget tab exists and renders (was a missing function)" bash -c "
+  grep -q 'function renderBudget' js/app.js || exit 1
+  grep -q 'renderBudget' js/app.js
+  grep -q 'tab-dayof' index.html || exit 1
+  node -e \"const L=require('./js/logic.js');['makeScheduleEvent','sortSchedule','scheduleConflicts','scheduleTotal','dietaryStats','budgetAlerts','suggestedBudget','budgetTotals'].forEach(f=>{if(typeof L[f]!=='function')throw new Error('missing '+f)});\""
+check "UI wires day-of schedule, diet field, budget alerts" bash -c "
+  for n in renderSchedule makeScheduleEvent scheduleConflicts tab-dayof sadd sdel stime gdiet dietaryStats budgetAlerts bsplit blines; do
+    grep -q \"\$n\" index.html js/app.js js/logic.js || exit 1
+  done"
+
 echo "--- smoke: $pass passed, $fail failed ---"
 exit $((fail>0))

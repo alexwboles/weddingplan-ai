@@ -1,5 +1,7 @@
 # WeddingPlan AI
 
+> **This project has been merged into partyplan-ai — active development continues at https://github.com/alexwboles/partyplan-ai.** WeddingPlan's 12-month task bank now ships as PartyPlan's "Wedding (12-month plan)" preset, along with its meal-choice counting, wedding budget split, nudge escalation, and seating planner. This repo is archived and read-only.
+
 **Your wedding, planned — without the spreadsheet chaos.** Enter your wedding date → WeddingPlan AI generates a 12-month planning timeline, tracks your budget by category, manages the guest list with RSVPs and meal choices, and keeps every vendor organized — all running 100% locally in your browser.
 
 ## The problem

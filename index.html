@@ -44,9 +44,14 @@
 <footer>
   <details>
     <summary>Settings</summary>
-    <label>OpenAI API key (optional — enables AI wording polish; never required):
+    <label>OpenAI API key (optional — powers the AI wording polish below; never required):
       <input type="password" id="apikey" placeholder="sk-…" autocomplete="off">
     </label>
+    <label>AI wording polish
+      <textarea id="polishInput" rows="3" placeholder="Paste invitation wording, vows, a vendor email…"></textarea>
+    </label>
+    <button id="polishBtn" class="ghostbtn">Polish with AI</button>
+    <div id="polishOut" class="polishout" aria-live="polite"></div>
     <button id="reset" class="danger">Start over (clears this device)</button>
   </details>
   <p class="muted small">Your plan lives in this browser's localStorage (<code>weddingplan.v1</code>). Nothing is uploaded anywhere.</p>

@@ -169,6 +169,18 @@ button.danger {
   padding: 9px 16px; font-size: 13.5px; font-weight: 600;
 }
 button.danger:hover { background: #faece7; }
+footer details textarea {
+  display: block; width: 100%; margin-top: 8px; font-size: 14px; font-family: var(--sans);
+  border: 1px solid var(--line); border-radius: 0; padding: 10px 13px; resize: vertical;
+  background: #fff; color: var(--ink);
+}
+.polishout {
+  display: none; margin: 12px 0 4px; padding: 12px 14px;
+  background: #fff; border: 1px solid var(--line); border-radius: 0;
+  white-space: pre-wrap; font-size: 14px;
+}
+.polishout.has { display: block; }
+button.ghostbtn:disabled { opacity: .55; cursor: wait; }
 footer p { text-align: center; }
 
 /* ---------- motion ---------- */

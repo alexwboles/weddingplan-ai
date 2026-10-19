@@ -12,7 +12,10 @@
   function blank() {
     return { weddingDate: "", done: [], budget: [], guests: [], vendors: [], tables: [], schedule: [], settings: {} };
   }
-  function save(s) { localStorage.setItem(KEY, JSON.stringify(s)); }
+  function save(s) {
+    try { localStorage.setItem(KEY, JSON.stringify(s)); }
+    catch (e) { /* storage blocked (e.g. sandboxed preview iframe): state stays in memory */ }
+  }
 
   let state = load();
   if (!Array.isArray(state.schedule)) state.schedule = []; // pre-schedule saves
@@ -451,6 +454,52 @@
     $("apikey").value = (state.settings && state.settings.key) || "";
   }
 
+  /* AI wording polish: uses the user's own OpenAI key (stored only on-device)
+     to polish invitation/vow/email wording. Never required; errors are shown. */
+  async function polishWithAI() {
+    const key = state.settings && state.settings.key;
+    const src = $("polishInput").value.trim();
+    const out = $("polishOut");
+    const btn = $("polishBtn");
+    out.classList.remove("has");
+    if (!src) { out.textContent = "Paste some text above first."; out.classList.add("has"); return; }
+    if (!key) {
+      out.textContent = "Add your OpenAI API key above first — it never leaves this device except in the OpenAI request itself.";
+      out.classList.add("has"); return;
+    }
+    btn.disabled = true; btn.textContent = "Polishing…"; out.textContent = "";
+    try {
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          max_tokens: 600,
+          temperature: 0.7,
+          messages: [
+            { role: "system", content: "You polish wedding-related wording (invitations, vows, vendor emails, toasts). Return only the polished text, keeping the same meaning and tone; no preamble or commentary." },
+            { role: "user", content: src }
+          ]
+        })
+      });
+      if (!res.ok) {
+        let detail = "";
+        try { detail = await res.text(); } catch (e) { /* ignore */ }
+        throw new Error(res.status === 401
+          ? "The API key was rejected (401) — check the key and try again."
+          : "OpenAI returned status " + res.status + ". " + String(detail).slice(0, 160));
+      }
+      const data = await res.json();
+      const msg = data && data.choices && data.choices[0] && data.choices[0].message;
+      const txt = String((msg && msg.content) || "").trim();
+      out.textContent = txt || "No text came back — try again.";
+    } catch (err) {
+      out.textContent = "⚠ " + (err && err.message ? err.message : String(err));
+    }
+    btn.disabled = false; btn.textContent = "Polish with AI";
+    out.classList.add("has");
+  }
+
   function printPlan() {
     if (!state.weddingDate) { alert("Set your wedding date first."); return; }
     const w = window.open("", "_blank");
@@ -475,6 +524,7 @@
       state.settings = state.settings || {};
       state.settings.key = e.target.value.trim(); save(state);
     });
+    $("polishBtn").addEventListener("click", polishWithAI);
     $("reset").addEventListener("click", () => {
       if (confirm("Start over? This clears your wedding plan on this device.")) {
         state = blank(); save(state); renderSettings(); render();

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# WeddingPlan AI smoke tests — 12 checks. Exit non-zero on first failure.
+# WeddingPlan AI smoke tests. Exit non-zero on first failure.
 set -u
 cd "$(dirname "$0")/.."
 pass=0; fail=0
@@ -72,6 +72,15 @@ check "scheduleSpan logic" node -e "
   if (L.scheduleSpan([]) !== null) throw new Error('empty should be null');
   if (L.scheduleSpan([{ time: 'bad' }]) !== null) throw new Error('bad times filtered');
 "
+
+check "storage writes are guarded (iframe-safe)" bash -c "grep -q 'try { localStorage.setItem' js/app.js"
+check "AI wording polish wired end to end" bash -c "
+  for n in polishInput polishBtn polishOut; do
+    grep -q \"\$n\" index.html || exit 1
+    grep -q \"\$n\" js/app.js || exit 1
+  done
+  grep -q 'api.openai.com/v1/chat/completions' js/app.js || exit 1
+  grep -q '.polishout' css/style.css || exit 1"
 
 echo "--- smoke: $pass passed, $fail failed ---"
 exit $((fail>0))
